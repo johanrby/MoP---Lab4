@@ -1,0 +1,92 @@
+/*startup.c*/
+
+__attribute__((naked)) __attribute__((section (".start_section")) )
+void startup ( void )
+{
+__asm__ volatile(" LDR R0,=0x2001C000\n");		/* set stack */
+__asm__ volatile(" MOV SP,R0\n");
+__asm__ volatile(" BL main\n");					/* call main */
+__asm__ volatile(".L1: B .L1\n");				/* never return */
+}
+#define GPIO_D				0x40020C00
+#define GPIO_D_MODER		((volatile unsigned int *)		(GPIO_D))
+#define GPIO_D_OTYPER		((volatile unsigned short *)	(GPIO_D+0x05))
+#define GPIO_D_PUPDR		((volatile unsigned short *) 	(GPIO_D+0x0E))
+#define GPIO_D_OSPEEDR		((volatile unsigned int *)		(GPIO_D+0x08))
+
+#define GPIO_D_ODR			((volatile unsigned short *)	(GPIO_D+0x14))
+#define GPIO_D_ODR_LOW 		((volatile unsigned char *)	 	(GPIO_D+0x14))	
+#define GPIO_D_ODR_HIGH 	((volatile unsigned char *)		(GPIO_D+0x15))
+#define GPIO_D_IDR_LOW		((volatile unsigned char *)		(GPIO_D+0x10))	
+#define GPIO_D_IDR_HIGH		((volatile unsigned char *)		(GPIO_D+0x11))
+
+#define SysTick				0xE000E010
+#define STK_CTRL			((volatile unsigned int *)		(SysTick))
+#define STK_LOAD			((volatile unsigned int *)		(SysTick+0x04))
+#define STK_VAL				((volatile unsigned int *)		(SysTick+0x08))
+
+#define SIMULATOR
+
+#ifdef SIMULATOR
+#define DELAY_COUNT 100
+#else
+#define DELAY_COUNT 1000000
+#endif
+
+
+
+
+
+static volatile int systick_flag;
+static volatile int delay_count;
+
+void systick_irq_handler( void ){
+	*STK_CTRL = 0;					// De-aktivera räknaren 
+	delay_count = delay_count - 1;
+	if( delay_count > 0 ){
+		delay_1mikro();
+	}
+	else{
+		systick_flag = 1;
+	}
+}
+
+void delay_1mikro( void ){
+	* STK_CTRL = 0;
+	* STK_LOAD = (168 - 1);
+	* STK_VAL = 0;
+	* STK_CTRL = 7;
+}
+
+void delay( unsigned int count ){
+	if (count == 0) return;
+	delay_count = count;
+	systick_flag = 0;
+	delay_1mikro();
+}
+
+
+void app_initilize( void ){
+	* GPIO_D_MODER = 0x55555555;  		// 0-15 är utport
+	* GPIO_D_OTYPER = 0x00000000;
+	*((void (**) (void) ) 0x2001C03C ) = systick_irq_handler;  // initiera avbrottssvektor 
+	
+	
+}
+void main(void){
+	//unsigned char c = 0;
+	app_initilize();
+	*GPIO_D_ODR_LOW = 0;
+	delay( DELAY_COUNT );
+	*GPIO_D_ODR_LOW = 0xFF;
+	while( 1 ){
+		if( systick_flag  )
+			break;
+			//*GPIO_D_ODR_HIGH = c;
+			//c++;
+			// HÄR PLACERAS KOD SOM KAN UTFÖRAS UNDER VÄNTETIDEN 
+	}
+	
+	// HÄR FINNS DEN KOD SOM KAN UTFÖRAS UNDER VÄNTETIDEN
+	*GPIO_D_ODR_LOW = 0;
+}
