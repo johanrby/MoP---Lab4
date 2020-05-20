@@ -55,35 +55,59 @@ __asm__ volatile(".L1: B .L1\n");				/* never return */
 #define EXTI1_IRQ_BPOS	2
 #define EXTI0_IRQ_BPOS	1
 
+/* Globala variabler */
+static volatile unsigned int count = 0;
 
 
 
 void irq_EXTI0(void){
-	return 0;
+	if(*EXTI_PR & (EXTI0_IRQ_BPOS)){
+		*EXTI_PR |= (EXTI0_IRQ_BPOS); 	//återställer avbrottet från EXTI0
+		
+		*GPIO_E_ODR_LOW |= (1<<4);		// ettställa 5e biten
+		*GPIO_E_ODR_LOW &= ~(1<<4);		// nollställa 5e biten
+		count++;			
+	}
 }
+
+
+
 void irq_EXTI1(void){
-	return 0;
+	if(*EXTI_PR & (EXTI1_IRQ_BPOS)){
+		*EXTI_PR |= (EXTI1_IRQ_BPOS);	// återställer avbrottet från EXTI1
+		*GPIO_E_ODR_LOW |= (1<<5); 		// ettställa 6e biten
+		*GPIO_E_ODR_LOW &= ~(1<<5);		// nollställa 6e biten
+		count = 0;	
+	}
 }
+
+
+
 void irq_EXTI2(void){
-	return 0;
+	if(*EXTI_PR & (EXTI2_IRQ_BPOS)){
+		*EXTI_PR |= (EXTI2_IRQ_BPOS);	// återställer avbrottet från EXTI2
+		*GPIO_E_ODR_LOW |= (1<<6); 		// ettställa 7e biten
+		*GPIO_E_ODR_LOW &= ~(1<<6);		// nollställa 7e biten
+		if( count > 0 ){
+				count = 0;			// släck diodramp
+			}
+			else{
+				count = 255;		// tänd diodramp
+			}
+	}
 }
 
 
 
-
-	
-void irq_handler(void){
-	return 0;
-}
 	
 	
 	
 void app_init( void ){
-	* GPIO_D_MODER = 0x00005555;  					// Port D: pin0-7 är utport
-	* GPIO_E_MODER = 0x1500;						// Port E: pin4-6 är utport
+	* GPIO_D_MODER = 0x00005555;  	// Port D: pin0-7 är utport
+	* GPIO_E_MODER = 0x1500;		// Port E: pin4-6 är utport
 	
-	*SYSCFG_EXTICR1 &= 0x0FFF;  // Nollställ fält
-	*SYSCFG_EXTICR1 |= 0x0444;  // PE3->EXTI2,EXTI1,EXTI0
+	*SYSCFG_EXTICR1 &= 0x0FFF;  	// Nollställ fält
+	*SYSCFG_EXTICR1 |= 0x0444;  	// PE3->EXTI2,EXTI1,EXTI0
 
 	/* Bestäm hur avbrott ska genereras med EXTI2,1 och 0 */
 	*EXTI_IMR |= EXTI2_IRQ_BPOS + EXTI1_IRQ_BPOS + EXTI0_IRQ_BPOS;		// Aktivera genom att ettställa motsvarande bit i EXTI_IMR
@@ -91,24 +115,22 @@ void app_init( void ){
 	*EXTI_FTST &= ~(EXTI2_IRQ_BPOS +EXTI1_IRQ_BPOS + EXTI0_IRQ_BPOS);	// Maskera falling trigger
 	
 	
-	*((void (**) (void) ) EXTI2_IRQVEC ) = irq_handler;			// Avbrottsvektor
-	*((void (**) (void) ) EXTI1_IRQVEC ) = irq_handler;			// Avbrottsvektor
-	*((void (**) (void) ) EXTI0_IRQVEC ) = irq_handler;			// Avbrottsvektor
+	*((void (**) (void) ) EXTI2_IRQVEC ) = irq_EXTI2;			// Avbrottsvektor
+	*((void (**) (void) ) EXTI1_IRQVEC ) = irq_EXTI1;			// Avbrottsvektor
+	*((void (**) (void) ) EXTI0_IRQVEC ) = irq_EXTI0;			// Avbrottsvektor
 	
 	
 	*NVIC_ISER0 |= NVIC_EXTI2_IRQ_BPOS;							// Aktivera NVIC för EXTI2
 	*NVIC_ISER0 |= NVIC_EXTI1_IRQ_BPOS;							// Aktivera NVIC för EXTI1
 	*NVIC_ISER0 |= NVIC_EXTI0_IRQ_BPOS;							// Aktivera NVIC för EXTI0
-
-
 	
 }// init
 
 
-static volatile unsigned int count = 0;
 void main(void){
 	app_init();
 	while( 1 ){
 		*GPIO_D_ODR_LOW = count; 		// utport = count		
 	}
 }// main
+
